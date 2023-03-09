@@ -12,12 +12,16 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Reflection;
 using VisioForge.Core.VideoEdit.Timeline.Timeline;
+using VisioForge.MediaFramework.Helpers;
 
 namespace TIkTokStats
 {
     public partial class MainWindow : Window
     {
-        private int index = 0;
+        private int _index = 0;
+        private ExcelPackage _package;
+        ExcelWorksheet _worksheet;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -36,7 +40,7 @@ namespace TIkTokStats
             {
                 if (isNew)
                 {
-                    index = 0;
+                    _index = 0;
                     OpenFileDialog openFileDialogTemp = new OpenFileDialog();
                     bool? result = openFileDialogTemp.ShowDialog();
                     if (result == false || result == null) return;
@@ -44,72 +48,77 @@ namespace TIkTokStats
                 }
                 if (openFileDialog != null)
                 {
-                    Stream stream = stream = openFileDialog.OpenFile();
-                    List<string> userUrl = await ParseUrlUserFromExcelAsync(openFileDialog);
-                    List<string>[] userInfo = new List<string>[userUrl.Count];
-                    for (int i = index; i < userUrl.Count; i++)
+                    Stream stream  = openFileDialog.OpenFile();
+                    _package = GetExcel(openFileDialog, new FileInfo(openFileDialog.FileName));
+                    _worksheet = await CheckExcelPageAsync(_package);
+                    using (_package)
                     {
-                        var web = new HtmlWeb();
-                        var doc = await web.LoadFromWebAsync(userUrl[i]);
-                        userInfo[i] = new List<string>
+                        await Task.Run(() => stream.Close());
+                        string userUrl = String.Empty;
+                        List<string> usersUrl = new List<string>();
+                        do
                         {
-                            doc.DocumentNode.SelectSingleNode("//strong[@title='Likes']").InnerHtml,
-                            doc.DocumentNode.SelectSingleNode("//strong[@title='Followers']").InnerHtml
-                        };
-                        for (int j = 0; j < userInfo[i].Count; j++)
-                        {
-                            await SaveInExcelAsync(stream, openFileDialog.FileName, i, j, userInfo[i][j]);
-                        }
-                        Progress.Text = ((float)(i + 1) / (float)userUrl.Count * 100).ToString("0") + "%";
-                        index = i;
+                            userUrl = GetUrl(_worksheet);
+                            if (string.IsNullOrEmpty(userUrl)) break;
+                            await WriteAllInfo(openFileDialog, stream, userUrl);
+                            Progress.Text = "Пройшло " + (_index + 1) + " елементів";
+                            _index++;
+
+                        } while (!string.IsNullOrEmpty(userUrl));
+                        SetBaseInfo();
                     }
                     stream.Close();
                     ShowMessageBox();
+                    Progress.Text = string.Empty;
                 }
             }
             catch (System.NullReferenceException)
             {
+                _index += 1;
                 ViewInfoOfUser(false, openFileDialog);
-                MessageBox.Show("Помилка в запусу одного файлу на " + (index + 2) + " рядку", 
-                    "Помилка", MessageBoxButton.OK, MessageBoxImage.Information);
+                ErrorSave();
             }
         }
 
-        private async Task<List<string>> ParseUrlUserFromExcelAsync(OpenFileDialog openFileDialog)
+        private static ExcelPackage GetExcel(OpenFileDialog openFileDialog, FileInfo newFile)
         {
-            Stream stream;
-            try
+            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+            return new ExcelPackage(newFile);
+        }
+
+        private async Task WriteAllInfo(OpenFileDialog openFileDialog, Stream stream, string userUrl)
+        {
+            var web = new HtmlWeb();
+            var doc = await web.LoadFromWebAsync(userUrl);
+            if (doc != null)
             {
-                if ((stream = openFileDialog.OpenFile()) != null)
-                {
-                    ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-                    var newFile = new FileInfo(openFileDialog.FileName);
-                    using (var package = new ExcelPackage(newFile))
+                List<string> userInfo = new List<string>
                     {
-                        await Task.Run(() => stream.Close());
-                        ExcelWorksheet worksheet = await CheckExcelPageAsync(package); 
-                        string userUrl = String.Empty;
-                        List<string> usersUrl = new List<string>();
-                        int index = 2;
-                        do
-                        {
-                            var cell = worksheet.Cells[index, 1];
-                            userUrl = cell.Value?.ToString() ?? string.Empty;
-                            if (string.IsNullOrEmpty(userUrl)) break;
-                            usersUrl.Add(userUrl);
-                            index++;
-                        } while (!string.IsNullOrEmpty(userUrl));
-                        return usersUrl;
-                    }
+                        doc.DocumentNode.SelectSingleNode("//strong[@title='Likes']").InnerHtml,
+                        doc.DocumentNode.SelectSingleNode("//strong[@title='Followers']").InnerHtml
+                    };
+                for (int j = 0; j < userInfo.Count; j++)
+                {
+                    await SaveInExcelAsync(stream, openFileDialog.FileName, _index, j, userInfo[j]);
                 }
             }
-            catch (System.NullReferenceException)
-            {
-                MessageBox.Show("Помилка в парсенгу url", "Помилка", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            return null;
+            else
+                ErrorSave();
         }
 
+        private string GetUrl(ExcelWorksheet worksheet)
+        {
+            string userUrl;
+            var cell = worksheet.Cells[_index + 2, 1];
+            userUrl = cell.Value?.ToString() ?? string.Empty;
+            return userUrl;
+        }
+
+        private void ErrorSave()
+        {
+            MessageBox.Show("Помилка в запусу одного файлу на " + (_index + 2) + " рядку",
+                                        "Помилка", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
         private async Task SaveInExcelAsync(Stream stream, string path, int indexCellsX, int indexCellsY, string value)
         {
             var newFile = new FileInfo(path);
@@ -118,7 +127,6 @@ namespace TIkTokStats
             {
                 await Task.Run(() => stream.Close());
                 ExcelWorksheet worksheet = await CheckExcelPageAsync(package);
-                SetBaseInfo(worksheet);
                 worksheet.Cells[indexCellsX + 2, indexCellsY + 2].Value = value;
                 await Task.Run(() => package.Save());
             }
@@ -133,11 +141,11 @@ namespace TIkTokStats
             }
             return worksheet;
         }
-        private static void SetBaseInfo(ExcelWorksheet worksheet)
+        private void SetBaseInfo()
         {
-            worksheet.Cells[1, 1].Value = "User Url";
-            worksheet.Cells[1, 2].Value = "User Likes";
-            worksheet.Cells[1, 3].Value = "User Followers";
+            _worksheet.Cells[1, 1].Value = "User Url";
+            _worksheet.Cells[1, 2].Value = "User Likes";
+            _worksheet.Cells[1, 3].Value = "User Followers";
         }
         private static void ShowMessageBox()
         {

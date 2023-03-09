@@ -17,7 +17,7 @@
                 HorizontalAlignment="Center" VerticalAlignment="Top">
             Оновити дані
         </Button>
-        <TextBlock x:Name="Progress" Margin="0,285,0,0" Foreground="White" FontSize="45" 
-                   HorizontalAlignment="Center" VerticalAlignment="Top"></TextBlock>
+        <TextBlock x:Name="Progress" Margin="0,285,0,0" Foreground="White" FontSize="18" 
+                   HorizontalAlignment="Center" VerticalAlignment="Top" Width="230" TextAlignment="Center"/>
     </Grid>
 </Window>
