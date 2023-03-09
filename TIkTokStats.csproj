@@ -168,9 +168,9 @@
     <Resource Include="Resources\icon.jpg" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Resources\background.gif">
+    <AdditionalFiles Include="Resources\background.gif">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </EmbeddedResource>
+    </AdditionalFiles>
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Resources\ShortIcon.ico" />

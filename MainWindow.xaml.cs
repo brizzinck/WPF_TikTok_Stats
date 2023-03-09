@@ -1,20 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Media;
 using HtmlAgilityPack;
 using OfficeOpenXml;
 using System.IO;
 using Microsoft.Win32;
-using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
-using System.Reflection;
-using VisioForge.Core.VideoEdit.Timeline.Timeline;
-using VisioForge.MediaFramework.Helpers;
-using System.Net;
-using System.Security.Policy;
 
 namespace TIkTokStats
 {
@@ -52,41 +43,42 @@ namespace TIkTokStats
                 {
                     Stream stream  = openFileDialog.OpenFile();
                     _package = GetExcel(new FileInfo(openFileDialog.FileName));
-                    _worksheet = await CheckExcelPageAsync(_package);
-                    using (_package)
+                    if (_package != null)
                     {
-                        await Task.Run(() => stream.Close());
-                        string userUrl = String.Empty;
-                        List<string> usersUrl = new List<string>();
-                        do
+                        _worksheet = await CheckExcelPageAsync(_package);
+                        using (_package)
                         {
-                            userUrl = GetUrl(_worksheet);
-                            if (string.IsNullOrEmpty(userUrl)) break;
-                            if (!await WriteAllInfo(openFileDialog, stream, userUrl))
-                                ErrorSave();
-                            Progress.Text = "Пройшло " + (_index + 1) + " елементів";
-                            _index++;
+                            await Task.Run(() => stream.Close());
+                            string userUrl = String.Empty;
+                            List<string> usersUrl = new List<string>();
+                            do
+                            {
+                                userUrl = GetUrl(_worksheet);
+                                if (string.IsNullOrEmpty(userUrl)) break;
+                                await WriteAllInfo(openFileDialog, stream, userUrl);
+                                Progress.Text = "Пройшло " + (_index + 1) + " елементів";
+                                _index++;
 
-                        } while (!string.IsNullOrEmpty(userUrl));
-                        SetBaseInfo();
+                            } while (!string.IsNullOrEmpty(userUrl));
+                            SetBaseInfo();
+                        }
+                        stream.Close();
+                        ShowMessageBox();
+                        Progress.Text = string.Empty;
                     }
-                    stream.Close();
-                    ShowMessageBox();
-                    Progress.Text = string.Empty;
                 }
             }
             catch (System.NullReferenceException)
             {
+                if (_package == null)
+                {
+                    _index = 0;
+                    return;
+                }
                 _index += 1;
                 ViewInfoOfUser(false, openFileDialog);
-                ErrorSave();
+                await ErrorSaveAsync();
             }
-        }
-
-        private static ExcelPackage GetExcel(FileInfo newFile)
-        {
-            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-            return new ExcelPackage(newFile);
         }
 
         private async Task<bool> WriteAllInfo(OpenFileDialog openFileDialog, Stream stream, string userUrl)
@@ -108,12 +100,24 @@ namespace TIkTokStats
                     }
                 }
                 else
-                    ErrorSave();
+                    await ErrorSaveAsync();
                 return true;
             }
             return false;
         }
-
+        private static ExcelPackage GetExcel(FileInfo newFile)
+        {
+            try
+            {
+                ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+                return new ExcelPackage(newFile);
+            }
+            catch (System.IO.InvalidDataException)
+            {
+                ShowErrorInvalidDataException();
+            }
+            return null;
+        }
         private string GetUrl(ExcelWorksheet worksheet)
         {
             string userUrl;
@@ -129,10 +133,14 @@ namespace TIkTokStats
             }
             return false;
         }
-        private void ErrorSave()
+        private async Task ErrorSaveAsync()
         {
-            MessageBox.Show("Помилка в запусу одного файлу на " + (_index + 1) + " рядку",
-                                        "Помилка", MessageBoxButton.OK, MessageBoxImage.Information);
+            await Task.Run(() =>
+            {
+                MessageBox.Show("Помилка в запису одного файлу на " + (_index + 1) + 
+                    " рядку!\nМожливо силка не працює!", "Помилка", 
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            });
         }
         private async Task SaveInExcelAsync(Stream stream, string path, int indexCellsX, int indexCellsY, string value)
         {
@@ -164,7 +172,11 @@ namespace TIkTokStats
         }
         private static void ShowMessageBox()
         {
-            MessageBox.Show("Дані оновлено", "Виконано", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("Дані оновлено!", "Виконано", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        private static void ShowErrorInvalidDataException()
+        {
+            MessageBox.Show("Здається, ти обрав не файл Excel", "Помилка", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         private void Background_MediaEnded(object sender, RoutedEventArgs e)
         {
