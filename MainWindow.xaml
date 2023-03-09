@@ -9,13 +9,15 @@
         Topmost="False" WindowState="Normal" Icon="./Resources/icon.jpg">
     <Grid Background="Black">
         <MediaElement x:Name="Background" Source="./Resources/background.gif" 
-                      LoadedBehavior="Manual" UnloadedBehavior="Manual" Margin="40,56,40,100" 
+                      LoadedBehavior="Play" UnloadedBehavior="Manual" Margin="54,31,54,163" 
                       MediaEnded="Background_MediaEnded"/>
         <Button Height="54"  Width="184" Click="Button_Click" FontSize="20" 
                 FontFamily="Arial Black" Foreground="White" Background="{x:Null}" 
-                BorderBrush="{x:Null}" Margin="0,289,0,0" 
+                BorderBrush="{x:Null}" Margin="0,226,0,0" 
                 HorizontalAlignment="Center" VerticalAlignment="Top">
             Оновити дані
         </Button>
+        <TextBlock x:Name="Progress" Margin="0,285,0,0" Foreground="White" FontSize="45" 
+                   HorizontalAlignment="Center" VerticalAlignment="Top"></TextBlock>
     </Grid>
 </Window>
