@@ -13,6 +13,8 @@ using System.Threading.Tasks;
 using System.Reflection;
 using VisioForge.Core.VideoEdit.Timeline.Timeline;
 using VisioForge.MediaFramework.Helpers;
+using System.Net;
+using System.Security.Policy;
 
 namespace TIkTokStats
 {
@@ -49,7 +51,7 @@ namespace TIkTokStats
                 if (openFileDialog != null)
                 {
                     Stream stream  = openFileDialog.OpenFile();
-                    _package = GetExcel(openFileDialog, new FileInfo(openFileDialog.FileName));
+                    _package = GetExcel(new FileInfo(openFileDialog.FileName));
                     _worksheet = await CheckExcelPageAsync(_package);
                     using (_package)
                     {
@@ -60,7 +62,8 @@ namespace TIkTokStats
                         {
                             userUrl = GetUrl(_worksheet);
                             if (string.IsNullOrEmpty(userUrl)) break;
-                            await WriteAllInfo(openFileDialog, stream, userUrl);
+                            if (!await WriteAllInfo(openFileDialog, stream, userUrl))
+                                ErrorSave();
                             Progress.Text = "Пройшло " + (_index + 1) + " елементів";
                             _index++;
 
@@ -80,30 +83,35 @@ namespace TIkTokStats
             }
         }
 
-        private static ExcelPackage GetExcel(OpenFileDialog openFileDialog, FileInfo newFile)
+        private static ExcelPackage GetExcel(FileInfo newFile)
         {
             ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
             return new ExcelPackage(newFile);
         }
 
-        private async Task WriteAllInfo(OpenFileDialog openFileDialog, Stream stream, string userUrl)
+        private async Task<bool> WriteAllInfo(OpenFileDialog openFileDialog, Stream stream, string userUrl)
         {
             var web = new HtmlWeb();
-            var doc = await web.LoadFromWebAsync(userUrl);
-            if (doc != null)
+            if (IsUrlValid(userUrl) == true)
             {
-                List<string> userInfo = new List<string>
+                var doc = await web.LoadFromWebAsync(userUrl);
+                if (doc != null)
+                {
+                    List<string> userInfo = new List<string>
                     {
                         doc.DocumentNode.SelectSingleNode("//strong[@title='Likes']").InnerHtml,
                         doc.DocumentNode.SelectSingleNode("//strong[@title='Followers']").InnerHtml
                     };
-                for (int j = 0; j < userInfo.Count; j++)
-                {
-                    await SaveInExcelAsync(stream, openFileDialog.FileName, _index, j, userInfo[j]);
+                    for (int j = 0; j < userInfo.Count; j++)
+                    {
+                        await SaveInExcelAsync(stream, openFileDialog.FileName, _index, j, userInfo[j]);
+                    }
                 }
+                else
+                    ErrorSave();
+                return true;
             }
-            else
-                ErrorSave();
+            return false;
         }
 
         private string GetUrl(ExcelWorksheet worksheet)
@@ -113,10 +121,17 @@ namespace TIkTokStats
             userUrl = cell.Value?.ToString() ?? string.Empty;
             return userUrl;
         }
-
+        public static bool IsUrlValid(string url)
+        {
+            if (Uri.TryCreate(url, UriKind.Absolute, out Uri uriResult))
+            {
+                return (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps);
+            }
+            return false;
+        }
         private void ErrorSave()
         {
-            MessageBox.Show("Помилка в запусу одного файлу на " + (_index + 2) + " рядку",
+            MessageBox.Show("Помилка в запусу одного файлу на " + (_index + 1) + " рядку",
                                         "Помилка", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         private async Task SaveInExcelAsync(Stream stream, string path, int indexCellsX, int indexCellsY, string value)
